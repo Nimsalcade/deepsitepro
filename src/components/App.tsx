@@ -36,6 +36,8 @@ function App() {
   const [currentView, setCurrentView] = useState<"editor" | "preview">(
     "editor"
   );
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKey, setApiKey] = useState("");
 
   const fetchMe = async () => {
     const res = await fetch("/api/@me");
@@ -150,6 +152,11 @@ function App() {
     if (!resizer.current) return;
     resizer.current.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("resize", resetLayout);
+    
+    // Listen for API key modal events
+    window.addEventListener('showApiKeyModal', () => {
+      setShowApiKeyModal(true);
+    });
   });
 
   // Clean up event listeners on unmount
@@ -160,7 +167,75 @@ function App() {
       resizer.current.removeEventListener("mousedown", handleMouseDown);
     }
     window.removeEventListener("resize", resetLayout);
+    window.removeEventListener('showApiKeyModal', () => {
+      setShowApiKeyModal(true);
+    });
   });
+
+  // API Key Modal Component
+  const ApiKeyModal = () => {
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      try {
+        const response = await fetch("/api/set-api-key", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ apiKey }),
+        });
+        
+        if (response.ok) {
+          setShowApiKeyModal(false);
+          toast.success("API key set successfully");
+        } else {
+          const data = await response.json();
+          toast.error(data.message || "Failed to set API key");
+        }
+      } catch (error) {
+        toast.error("Failed to set API key");
+      }
+    };
+
+    return (
+      <div className={classNames(
+        "fixed inset-0 bg-black/50 flex items-center justify-center z-50",
+        { "hidden": !showApiKeyModal }
+      )}>
+        <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <h2 className="text-xl font-bold mb-4">API Key Required</h2>
+          <p className="text-gray-600 mb-4">
+            Please enter your DeepSeek API key to continue. You can get your API key from the DeepSeek dashboard.
+          </p>
+          <form onSubmit={handleSubmit}>
+            <input
+              type="text"
+              className="w-full border border-gray-300 rounded-lg p-3 mb-4"
+              placeholder="Enter your DeepSeek API key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              required
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 border border-gray-300 rounded-lg"
+                onClick={() => setShowApiKeyModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+              >
+                Submit
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="h-screen bg-gray-950 font-sans overflow-hidden">
@@ -184,6 +259,10 @@ function App() {
       >
         <DeployButton html={html} error={error} auth={auth} />
       </Header>
+      
+      {/* API Key Modal */}
+      <ApiKeyModal />
+      
       <main className="max-lg:flex-col flex w-full">
         <div
           ref={editor}

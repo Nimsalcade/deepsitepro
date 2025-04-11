@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { RiSparkling2Fill } from "react-icons/ri";
 import { GrSend } from "react-icons/gr";
 import classNames from "classnames";
@@ -39,6 +39,13 @@ function AskAI({
   const [providerError, setProviderError] = useState("");
   const [openProModal, setOpenProModal] = useState(false);
   const [conversationId] = useState(() => uuidv4());
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+
+  useEffect(() => {
+    if (showApiKeyModal) {
+      window.dispatchEvent(new CustomEvent('showApiKeyModal'));
+    }
+  }, [showApiKeyModal]);
 
   const audio = new Audio(SuccessSound);
   audio.volume = 0.5;
@@ -139,11 +146,10 @@ function AskAI({
       });
 
       if (!request.ok) {
-        let errorMessage = "An error occurred";
-        const responseText = await request.text(); // Read the response body once
+        const responseText = await request.text();
         
         try {
-          const errorResponse = JSON.parse(responseText); // Try to parse as JSON
+          const errorResponse = JSON.parse(responseText);
           if (errorResponse.openLogin) {
             setOpen(true);
           } else if (errorResponse.openSelectProvider) {
@@ -151,14 +157,17 @@ function AskAI({
             setProviderError(errorResponse.message);
           } else if (errorResponse.openProModal) {
             setOpenProModal(true);
+          } else if (errorResponse.needApiKey) {
+            setShowApiKeyModal(true);
+            window.dispatchEvent(new CustomEvent('showApiKeyModal'));
           } else {
-            errorMessage = errorResponse.message || errorMessage;
+            toast.error(errorResponse.message || "An error occurred");
           }
         } catch (e) {
           // If not JSON, use the raw text
-          errorMessage = responseText;
+          toast.error(responseText || "An error occurred");
         }
-        toast.error(errorMessage);
+        
         setisAiWorking(false);
         return;
       }
