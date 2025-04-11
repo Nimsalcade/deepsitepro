@@ -25,6 +25,11 @@ import { COLORS } from "./utils/colors.js";
 // Load environment variables from .env file
 dotenv.config();
 
+// Configuration with API keys for deployment
+const CONFIG = {
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || "sk-f1fc18697e164577b2ee241039391fe1"
+};
+
 const app = express();
 
 // Comment out IP rate limiting for local usage
@@ -323,7 +328,7 @@ app.post("/api/ask-ai", async (req, res) => {
   try {
     // Replace Hugging Face client with OpenAI client for DeepSeek
     const client = new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
+      apiKey: CONFIG.DEEPSEEK_API_KEY,
       baseURL: "https://api.deepseek.com",
       defaultQuery: {
         context_length: 8192
@@ -412,7 +417,7 @@ app.post("/api/continue-response", async (req, res) => {
 
     // Replace Hugging Face client with OpenAI client for DeepSeek
     const client = new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
+      apiKey: CONFIG.DEEPSEEK_API_KEY,
       baseURL: "https://api.deepseek.com",
       defaultQuery: {
         context_length: 8192
