@@ -43,87 +43,85 @@ function AskAI({
   const audio = new Audio(SuccessSound);
   audio.volume = 0.5;
 
-  const handleStreamResponse = async (response: Response) => {
-    if (!response.body) return null;
-    
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let contentResponse = "";
-    let lastRenderTime = 0;
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        
-        // Check for continuation token
-        if (chunk.includes("__CONTINUE__")) {
-          // Remove continuation token from content
-          contentResponse += chunk.replace("__CONTINUE__\n", "");
-          
-          // Request continuation
-          const continueResponse = await fetch("/api/continue-response", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-conversation-id": conversationId
-            }
-          });
-
-          if (!continueResponse.ok) {
-            const errorText = await continueResponse.text();
-            let errorMessage;
-            try {
-              const errorJson = JSON.parse(errorText);
-              errorMessage = errorJson.message || "Failed to continue response";
-            } catch (e) {
-              errorMessage = errorText || "Failed to continue response";
-            }
-            throw new Error(errorMessage);
-          }
-
-          // Process the continuation response
-          await handleStreamResponse(continueResponse);
-          break;
-        }
-
-        contentResponse += chunk;
-        
-        // Preserve existing real-time preview functionality
-        const newHtml = contentResponse.match(/<!DOCTYPE html>[\s\S]*/)?.[0];
-        if (newHtml) {
-          let partialDoc = newHtml;
-          if (!partialDoc.includes("</html>")) {
-            partialDoc += "\n</html>";
-          }
-
-          const now = Date.now();
-          if (now - lastRenderTime > 300) {
-            setHtml(partialDoc);
-            lastRenderTime = now;
-          }
-
-          if (partialDoc.length > 200) {
-            onScrollToBottom();
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Stream processing error:", error);
-      throw error;
-    }
-
-    return contentResponse;
-  };
-
   const callAi = async () => {
     if (isAiWorking || !prompt.trim()) return;
     setisAiWorking(true);
     setProviderError("");
-    
-    let fullResponse = "";
+
+    const handleStreamResponse = async (response: Response) => {
+      if (!response.body) return null;
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let contentResponse = "";
+      let lastRenderTime = 0;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          
+          // Check for continuation token
+          if (chunk.includes("__CONTINUE__")) {
+            // Remove continuation token from content
+            contentResponse += chunk.replace("__CONTINUE__\n", "");
+            
+            // Request continuation
+            const continueResponse = await fetch("/api/continue-response", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-conversation-id": conversationId
+              }
+            });
+
+            if (!continueResponse.ok) {
+              const errorText = await continueResponse.text();
+              let errorMessage;
+              try {
+                const errorJson = JSON.parse(errorText);
+                errorMessage = errorJson.message || "Failed to continue response";
+              } catch (e) {
+                errorMessage = errorText || "Failed to continue response";
+              }
+              throw new Error(errorMessage);
+            }
+
+            // Process the continuation response
+            await handleStreamResponse(continueResponse);
+            break;
+          }
+
+          contentResponse += chunk;
+          
+          // Preserve existing real-time preview functionality
+          const newHtml = contentResponse.match(/<!DOCTYPE html>[\s\S]*/)?.[0];
+          if (newHtml) {
+            let partialDoc = newHtml;
+            if (!partialDoc.includes("</html>")) {
+              partialDoc += "\n</html>";
+            }
+
+            const now = Date.now();
+            if (now - lastRenderTime > 300) {
+              setHtml(partialDoc);
+              lastRenderTime = now;
+            }
+
+            if (partialDoc.length > 200) {
+              onScrollToBottom();
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Stream processing error:", error);
+        throw error;
+      }
+
+      return contentResponse;
+    };
 
     try {
       const request = await fetch("/api/ask-ai", {
@@ -142,10 +140,10 @@ function AskAI({
 
       if (!request.ok) {
         let errorMessage = "An error occurred";
-        const responseText = await request.text();
+        const responseText = await request.text(); // Read the response body once
         
         try {
-          const errorResponse = JSON.parse(responseText);
+          const errorResponse = JSON.parse(responseText); // Try to parse as JSON
           if (errorResponse.openLogin) {
             setOpen(true);
           } else if (errorResponse.openSelectProvider) {
@@ -157,6 +155,7 @@ function AskAI({
             errorMessage = errorResponse.message || errorMessage;
           }
         } catch (e) {
+          // If not JSON, use the raw text
           errorMessage = responseText;
         }
         toast.error(errorMessage);
@@ -164,41 +163,7 @@ function AskAI({
         return;
       }
 
-      fullResponse = await handleStreamResponse(request) || "";
-      
-      const fileRegex = /<file path="(.*?)">([\s\S]*?)<\/file>/g;
-      let match;
-      const files = [];
-      
-      // Parse the complete response for multiple files
-      while ((match = fileRegex.exec(fullResponse)) !== null) {
-        const filePath = match[1];
-        const fileContent = match[2];
-        files.push({ path: filePath, content: fileContent });
-      }
-      
-      // Use the index.html as the main preview if available
-      const indexHtmlFile = files.find(file => file.path === "index.html");
-      if (indexHtmlFile) {
-        setHtml(indexHtmlFile.content);
-      } else if (files.length > 0) {
-        // Fall back to the first HTML file if no index.html
-        const firstHtmlFile = files.find(file => file.path.endsWith('.html'));
-        if (firstHtmlFile) {
-          setHtml(firstHtmlFile.content);
-        }
-      }
-      
-      // Store all files in local storage for later access
-      if (files.length > 0) {
-        localStorage.setItem('generatedFiles', JSON.stringify(files));
-      } else {
-        // If no file structure detected, use the entire response as HTML
-        const htmlContent = fullResponse.match(/<!DOCTYPE html>[\s\S]*<\/html>/)?.[0];
-        if (htmlContent) {
-          setHtml(htmlContent);
-        }
-      }
+      await handleStreamResponse(request);
 
       toast.success("Application generated successfully");
       setPrompt("");
