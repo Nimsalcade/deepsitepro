@@ -221,42 +221,12 @@ Check out the configuration reference at https://huggingface.co/docs/hub/spaces-
 // Add conversation state management
 const activeConversations = new Map();
 
-// Add an endpoint to set the API key
-app.post("/api/set-api-key", express.json(), (req, res) => {
-  const { apiKey } = req.body;
-  
-  if (!apiKey) {
-    return res.status(400).send({
-      ok: false,
-      message: "API key is required"
-    });
-  }
-  
-  // Store the API key in memory (don't persist to disk for security)
-  process.env.DEEPSEEK_API_KEY = apiKey;
-  
-  res.status(200).send({
-    ok: true,
-    message: "API key set successfully"
-  });
-});
-
-// Modify the ask-ai endpoint to check for API key
 app.post("/api/ask-ai", async (req, res) => {
   const { prompt, provider, html, previousPrompt } = req.body;
   if (!prompt) {
     return res.status(400).send({
       ok: false,
       message: "Missing required fields",
-    });
-  }
-
-  // Check if API key is available
-  if (!process.env.DEEPSEEK_API_KEY) {
-    return res.status(401).send({
-      ok: false,
-      message: "API key is missing. Please set your API key first.",
-      needApiKey: true
     });
   }
 
